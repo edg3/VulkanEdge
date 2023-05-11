@@ -11,6 +11,12 @@ Uses:
 Silk.NET - https://github.com/dotnet/Silk.NET
 => Vulkan - https://www.vulkan.org/
 
+Nuget:
+2.17.1 - Silk.NET
+2.17.1 - Silk.NET.Vulkan
+2.17.1 - Silk.NET.Vulkan.Extensions.KHR
+2.17.1 - Silk.NET.Vulkan.Extensions.EXT
+
 Plans:
 ---
 Starting up:
