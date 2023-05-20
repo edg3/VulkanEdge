@@ -3,6 +3,7 @@
  * 2. Properties -> Windows Application
  * 3. Use logic shown below
  */
+using SampleGame;
 using VE;
 
-var e = new Engine();
+var e = new Engine("Sample Game", new(0, 0, 1), 1280, 720, new MenuState());
