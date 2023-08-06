@@ -71,6 +71,7 @@ public class Game
     private void Load()
     {
         Game.Input.Register();
+        // TODO: Load_Imports; load screen, etc - will currently stick to just load and draw without the threading for now
         _gameStates[0].Load();
     }
 
