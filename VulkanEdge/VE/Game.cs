@@ -1,4 +1,5 @@
-﻿using VE.Contents;
+﻿using Silk.NET.Input;
+using VE.Contents;
 
 namespace VE;
 
@@ -20,21 +21,25 @@ public class Game
     public static InputManager Input => _game.EInput;
     public static AudioManager Audio => _game.EAudio;
     public static AssetManager Assets => _game.EAssets;
+    public static GraphicsManager Graphics => _game.EGraphics;
+    public static void Exit() => _game.EExit();
+    public static IInputContext? InputContext { get; set; } = null;
 
     // Public properties
     public EventsManager EEvents { get; init; } = new();
     public InputManager EInput { get; init; } = new();
     public AudioManager EAudio { get; init; } = new();
     public AssetManager EAssets { get; init; } = new();
+    public GraphicsManager EGraphics { get; init; } = new();
+
+    // Game States
+    private List<GameState> _gameStates = new();
 
     // Game Window Creation
     public Game()
     {
-        // TODO: Create window
-        // TODO: Check if Vulkan supported - set Renderer
-        // TODO: if yes -> load vulkan stuff
-        // TODO: if no -> load open gl stuff
-        throw new NotImplementedException();
+        if (null != _game) throw new Exception("Game() - can't create second Game instance.");
+        _game = this;
     }
 
     // Future: Make the Silk.Net renderer onto a surface inside a Xamarin form - the game editor. Future step only in the stage 'thinking about it a lot' for now
@@ -46,13 +51,51 @@ public class Game
     // Game starting with the first state
     public void EStart(GameState gameState)
     {
+        _gameStates.Add(gameState);
+
+        EGraphics.Load += Load;
+        EGraphics.Update += Update;
+        EGraphics.Draw += Draw;
+
         // TODO: make it add all events to the queue for the base engine; such as key press, key release, mouse move, clicks, and so on
         // TODO: make it render 3D first, then 2D in order it was sent in
+        Graphics.Run();
     }
 
     // Clean up as needed
     ~Game()
     {
-        
+
+    }
+
+    private void Load()
+    {
+        Game.Input.Register();
+        _gameStates[0].Load();
+    }
+
+    private void Update(double obj)
+    {
+        if (_gameStates.Count > 0)
+        {
+            _gameStates.Last().Update();
+        }
+        else
+        {
+            Graphics.Close();
+        }
+    }
+
+    private void Draw(double obj)
+    {
+        if (_gameStates.Count > 0)
+        {
+            _gameStates.Last().Draw();
+        }
+    }
+
+    private void EExit()
+    {
+        Graphics.Close();
     }
 }
