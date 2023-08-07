@@ -89,14 +89,19 @@ public class Game
 
     private void Draw(double obj)
     {
+        Graphics.StartDraw();
+
         if (_gameStates.Count > 0)
         {
             _gameStates.Last().Draw();
         }
+
+        Graphics.EndDraw();
     }
 
     private void EExit()
     {
         Graphics.Close();
+        Graphics.Cleanup();
     }
 }
