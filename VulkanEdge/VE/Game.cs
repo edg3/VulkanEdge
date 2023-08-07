@@ -87,7 +87,7 @@ public class Game
         }
     }
 
-    private void Draw(double obj)
+    private unsafe void Draw(double obj)
     {
         Graphics.StartDraw();
 

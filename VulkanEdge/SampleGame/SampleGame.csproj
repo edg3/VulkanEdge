@@ -8,6 +8,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="shader.frag.spv" />
+    <None Remove="shader.vert.spv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="shader.frag.spv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="shader.vert.spv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\VE\VE.csproj" />
   </ItemGroup>
 
