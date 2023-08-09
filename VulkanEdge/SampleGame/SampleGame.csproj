@@ -25,4 +25,10 @@
     <ProjectReference Include="..\VE\VE.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="sample.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

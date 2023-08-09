@@ -1,4 +1,5 @@
 ﻿using Silk.NET.Input;
+using Silk.NET.Vulkan;
 using VE.Contents;
 
 namespace VE;
@@ -24,6 +25,8 @@ public class Game
     public static GraphicsManager Graphics => _game.EGraphics;
     public static void Exit() => _game.EExit();
     public static IInputContext? InputContext { get; set; } = null;
+    internal static void FreeImage(Silk.NET.Vulkan.Image textureImage) => Graphics.EFreeImage(textureImage);
+    internal static void FreeDeviceMemory(DeviceMemory deviceImageMemory) => Graphics.EFreeDeviceMemory(deviceImageMemory);
 
     // Public properties
     public EventsManager EEvents { get; init; } = new();

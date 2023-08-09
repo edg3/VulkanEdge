@@ -8,6 +8,9 @@ The goal is to have a easily reusable layer of an engine between existing Vulkan
 
 Note:
 ---
+2023.08.08: v0.0.2
+	Gone through (a) to organise the project and steps into a more 'understandable' format and cleaned as much as I could.
+
 2023.08.07: v0.0.1
 	Spent ages working on my own implementation for the 3D space and kept feeling my code was way too messy; so decided on a different approach. For ease I've taken the initial engine concept which I want, and mapped it out a little. Then worked out the easiest way to get the Vulkan 3D rendering 'started' with the least dirty 'excess' code around it.
 	Next step (a) is to revise the Vulkan code being used now to separate the logic 'as intended'; that is, move the start of draw into 'Graphics.StartDraw', then the end into 'Graphics.EndDraw', with the triangle renderer in 'SampleGameState.Draw'.
@@ -33,6 +36,7 @@ Nuget:
 2.17.1 - Silk.NET.Vulkan.Extensions.EXT
 2.17.1 - Silk.NET.Windowing
 2.17.1 - Silk.NET.Windowing.Common
+3.0.1 - SixLabors.ImageSharp
 
 Transitive nuget:
 Microsoft.CSharp

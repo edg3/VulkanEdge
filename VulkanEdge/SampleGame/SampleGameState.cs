@@ -1,6 +1,7 @@
 ﻿using Silk.NET.Input;
 using VE;
 using VE.Contents;
+using VE.Contents.GameObjects;
 
 namespace SampleGame;
 
@@ -8,12 +9,14 @@ public class SampleGameState : GameState
 {
     public override void Draw()
     {
-        //var b = 2;
+        sampleImg.Draw();
     }
+
+    GameObject2D sampleImg;
 
     public override void Load()
     {
-        //var a = 1;
+        sampleImg = new GameObject2D("./sample.png");
     }
 
     public override void Load_Draw()

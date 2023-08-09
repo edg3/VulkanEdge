@@ -14,6 +14,7 @@ using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
+using Buffer = Silk.NET.Vulkan.Buffer;
 using Image = Silk.NET.Vulkan.Image;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
 
@@ -27,7 +28,7 @@ public enum Renderer
 
 public class GraphicsManager
 {
-    private static string _version = "0.0.1";
+    private static string _version = "0.0.2";
 
     #region GLOBALS
     public Renderer Renderer { get; private set; } = Renderer.Vulkan;
@@ -38,7 +39,7 @@ public class GraphicsManager
         // Create Window
         _windowOptions = WindowOptions.DefaultVulkan with
         {
-            Title = "VE."+ _version,
+            Title = "VE." + _version,
             IsEventDriven = true
         };
 
@@ -1280,6 +1281,268 @@ public class GraphicsManager
         }
 
         return null;
+    }
+
+    internal unsafe (Image, DeviceMemory) OpenImage(string file)
+    {
+        Image textureImage;
+        DeviceMemory textureImageMemory;
+
+        using var img = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>(file);
+
+        ulong imageSize = (ulong)(img.Width * img.Height * img.PixelType.BitsPerPixel / 8);
+
+        Silk.NET.Vulkan.Buffer stagingBuffer = default;
+        DeviceMemory stagingBufferMemory = default;
+        CreateBuffer(imageSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        _vk!.MapMemory(vk_device, stagingBufferMemory, 0, imageSize, 0, &data);
+        img.CopyPixelDataTo(new Span<byte>(data, (int)imageSize));
+        _vk!.UnmapMemory(vk_device, stagingBufferMemory);
+
+        (textureImage, textureImageMemory) = CreateImage((uint)img.Width, (uint)img.Height, Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit, MemoryPropertyFlags.DeviceLocalBit);
+
+        TransitionImageLayout(textureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal);
+        CopyBufferToImage(stagingBuffer, textureImage, (uint)img.Width, (uint)img.Height);
+        TransitionImageLayout(textureImage, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal);
+
+        _vk!.DestroyBuffer(vk_device, stagingBuffer, null);
+        _vk!.FreeMemory(vk_device, stagingBufferMemory, null);
+
+        return (textureImage, textureImageMemory);
+    }
+
+    private void CopyBufferToImage(Silk.NET.Vulkan.Buffer stagingBuffer, Image textureImage, uint width, uint height)
+    {
+        CommandBuffer commandBuffer = BeginSingleTimeCommands();
+
+        BufferImageCopy region = new()
+        {
+            BufferOffset = 0,
+            BufferRowLength = 0,
+            BufferImageHeight = 0,
+            ImageSubresource =
+            {
+                AspectMask = ImageAspectFlags.ColorBit,
+                MipLevel = 0,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+            },
+            ImageOffset = new Offset3D(0, 0, 0),
+            ImageExtent = new Extent3D(width, height, 1),
+
+        };
+
+        _vk!.CmdCopyBufferToImage(commandBuffer, stagingBuffer, textureImage, ImageLayout.TransferDstOptimal, 1, region);
+
+        EndSingleTimeCommands(commandBuffer);
+    }
+
+    private unsafe void EndSingleTimeCommands(CommandBuffer commandBuffer)
+    {
+        _vk!.EndCommandBuffer(commandBuffer);
+
+        SubmitInfo submitInfo = new()
+        {
+            SType = StructureType.SubmitInfo,
+            CommandBufferCount = 1,
+            PCommandBuffers = &commandBuffer,
+        };
+
+        _vk!.QueueSubmit(vk_graphicsQueue, 1, submitInfo, default);
+        _vk!.QueueWaitIdle(vk_graphicsQueue);
+
+        _vk!.FreeCommandBuffers(vk_device, vk_commandPool, 1, commandBuffer);
+    }
+
+    private CommandBuffer BeginSingleTimeCommands()
+    {
+        CommandBufferAllocateInfo allocateInfo = new()
+        {
+            SType = StructureType.CommandBufferAllocateInfo,
+            Level = CommandBufferLevel.Primary,
+            CommandPool = vk_commandPool,
+            CommandBufferCount = 1,
+        };
+
+        _vk!.AllocateCommandBuffers(vk_device, allocateInfo, out CommandBuffer commandBuffer);
+
+        CommandBufferBeginInfo beginInfo = new()
+        {
+            SType = StructureType.CommandBufferBeginInfo,
+            Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
+        };
+
+        _vk!.BeginCommandBuffer(commandBuffer, beginInfo);
+
+        return commandBuffer;
+    }
+
+    private unsafe void TransitionImageLayout(Image textureImage, Format r8G8B8A8Srgb, ImageLayout oldLayout, ImageLayout newLayout)
+    {
+        CommandBuffer commandBuffer = BeginSingleTimeCommands();
+
+        ImageMemoryBarrier barrier = new()
+        {
+            SType = StructureType.ImageMemoryBarrier,
+            OldLayout = oldLayout,
+            NewLayout = newLayout,
+            SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            Image = textureImage,
+            SubresourceRange =
+            {
+                AspectMask = ImageAspectFlags.ColorBit,
+                BaseMipLevel = 0,
+                LevelCount = 1,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+            }
+        };
+
+        PipelineStageFlags sourceStage;
+        PipelineStageFlags destinationStage;
+
+        if (oldLayout == ImageLayout.Undefined && newLayout == ImageLayout.TransferDstOptimal)
+        {
+            barrier.SrcAccessMask = 0;
+            barrier.DstAccessMask = AccessFlags.TransferWriteBit;
+
+            sourceStage = PipelineStageFlags.TopOfPipeBit;
+            destinationStage = PipelineStageFlags.TransferBit;
+        }
+        else if (oldLayout == ImageLayout.TransferDstOptimal && newLayout == ImageLayout.ShaderReadOnlyOptimal)
+        {
+            barrier.SrcAccessMask = AccessFlags.TransferWriteBit;
+            barrier.DstAccessMask = AccessFlags.ShaderReadBit;
+
+            sourceStage = PipelineStageFlags.TransferBit;
+            destinationStage = PipelineStageFlags.FragmentShaderBit;
+        }
+        else
+        {
+            throw new Exception("unsupported layout transition!");
+        }
+
+        _vk!.CmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, null, 0, null, 1, barrier);
+
+        EndSingleTimeCommands(commandBuffer);
+
+    }
+
+    private unsafe (Image, DeviceMemory) CreateImage(uint width, uint height, Format format, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties)
+    {
+        Image image = new();
+        DeviceMemory textureImageMemory = new();
+
+        ImageCreateInfo imageInfo = new()
+        {
+            SType = StructureType.ImageCreateInfo,
+            ImageType = ImageType.Type2D,
+            Extent =
+            {
+                Width = width,
+                Height = height,
+                Depth = 1,
+            },
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Format = format,
+            Tiling = tiling,
+            InitialLayout = ImageLayout.Undefined,
+            Usage = usage,
+            Samples = SampleCountFlags.Count1Bit,
+            SharingMode = SharingMode.Exclusive,
+        };
+
+        Image* imagePtr = &image;
+        if (_vk!.CreateImage(vk_device, imageInfo, null, imagePtr) != Result.Success)
+        {
+            throw new Exception("failed to create image!");
+        }
+
+        _vk!.GetImageMemoryRequirements(vk_device, image, out MemoryRequirements memRequirements);
+
+        MemoryAllocateInfo allocInfo = new()
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = memRequirements.Size,
+            MemoryTypeIndex = FindMemoryType(memRequirements.MemoryTypeBits, properties),
+        };
+
+        DeviceMemory* imageMemoryPtr = &textureImageMemory;
+        if (_vk!.AllocateMemory(vk_device, allocInfo, null, imageMemoryPtr) != Result.Success)
+        {
+            throw new Exception("failed to allocate image memory!");
+        }
+
+        _vk!.BindImageMemory(vk_device, image, textureImageMemory, 0);
+
+        return (image, textureImageMemory);
+    }
+
+    private uint FindMemoryType(uint memoryTypeBits, MemoryPropertyFlags properties)
+    {
+        _vk!.GetPhysicalDeviceMemoryProperties(vk_physicalDevice, out PhysicalDeviceMemoryProperties memProperties);
+
+        for (int i = 0; i < memProperties.MemoryTypeCount; i++)
+        {
+            if ((memoryTypeBits & (1 << i)) != 0 && (memProperties.MemoryTypes[i].PropertyFlags & properties) == properties)
+            {
+                return (uint)i;
+            }
+        }
+
+        throw new Exception("failed to find suitable memory type!");
+    }
+
+    private unsafe void CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, ref Buffer buffer, DeviceMemory bufferMemory)
+    {
+        BufferCreateInfo bufferInfo = new()
+        {
+            SType = StructureType.BufferCreateInfo,
+            Size = size,
+            Usage = usage,
+            SharingMode = SharingMode.Exclusive,
+        };
+
+        fixed (Buffer* bufferPtr = &buffer)
+        {
+            // This fails... hmm
+            if (_vk!.CreateBuffer(vk_device, bufferInfo, null, bufferPtr) != Result.Success)
+            {
+                throw new Exception("failed to create vertex buffer!");
+            }
+        }
+
+        MemoryRequirements memRequirements = new();
+        _vk!.GetBufferMemoryRequirements(vk_device, buffer, out memRequirements);
+
+        MemoryAllocateInfo allocateInfo = new()
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = memRequirements.Size,
+            MemoryTypeIndex = FindMemoryType(memRequirements.MemoryTypeBits, properties),
+        };
+
+        DeviceMemory* bufferMemoryPtr = &bufferMemory;
+        if (_vk!.AllocateMemory(vk_device, allocateInfo, null, bufferMemoryPtr) != Result.Success)
+        {
+            throw new Exception("failed to allocate vertex buffer memory!");
+        }
+
+        _vk!.BindBufferMemory(vk_device, buffer, bufferMemory, 0);
+    }
+
+    internal unsafe void EFreeImage(Image textureImage)
+    {
+        _vk.DestroyImage(vk_device, textureImage, null);
+    }
+
+    internal unsafe void EFreeDeviceMemory(DeviceMemory deviceImageMemory)
+    {
+        _vk.FreeMemory(vk_device, deviceImageMemory, null);
     }
     #endregion
 
